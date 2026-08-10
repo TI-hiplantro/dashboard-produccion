@@ -36,7 +36,6 @@
   .loader .ltext b{color:var(--ink);}
   .loader.err{border-color:var(--bad);}
   .loader .ltext.err-txt{color:var(--bad);}
-  #fileInput{display:none;}
 
   /* ===== Date nav ===== */
   .datebar{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:6px;}
@@ -143,9 +142,7 @@
 </header>
 
 <div class="loader" id="loaderBox">
-  <button class="lbtn" id="loadBtn">Cargar tu Excel (.xlsx)</button>
-  <input type="file" id="fileInput" accept=".xlsx">
-  <div class="ltext" id="loaderText">Mostrando <b>datos de ejemplo</b> (2-ene a 15-jul-2026). Carga tu archivo de producción para ver tus datos reales — se procesa en el celular/navegador, no se sube a ningún servidor.</div>
+  <div class="ltext" id="loaderText">Cargando datos…</div>
 </div>
 
 <div class="datebar">
@@ -201,7 +198,7 @@
 
 <footer>
   <b>Cómo filtrar por día:</b> usa las flechas ‹ › o el selector para moverte entre los <span id="totalDatesLbl"></span> días con datos registrados en el archivo cargado. Todo el dashboard — indicadores, piso de planta, tendencia y causas — se recalcula al cambiar de fecha.<br>
-  <b>Cómo mantenerlo al día:</b> cada vez que actualices tu hoja BD, guarda el Excel y toca "Cargar tu Excel" arriba para traer los datos más recientes — todo se procesa en tu propio navegador, el archivo no se envía a ningún servidor.<br>
+  <b>Cómo mantenerlo al día:</b> el dashboard se actualiza solo cada día desde el Excel de producción — no requiere ninguna acción manual.<br>
   <b>Nota sobre "línea":</b> se reconstruyó del prefijo del código en la hoja BD — <b>EV</b> = línea con SE, <b>PT</b> = línea sin SE — mismo criterio de tu hoja "Gráfica avance mensual". Los umbrales de color (70%/50%) son sugeridos y ajustables.
 </footer>
 
@@ -495,41 +492,6 @@ function showLoaderMsg(text, isErr){
   t.innerHTML = text;
 }
 
-document.getElementById('loadBtn').onclick = ()=> document.getElementById('fileInput').click();
-document.getElementById('fileInput').addEventListener('change', function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  showLoaderMsg(`Leyendo <b>${file.name}</b>…`, false);
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    try{
-      const wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
-      const sheetName = wb.SheetNames.find(n=>n.trim().toUpperCase()==='BD');
-      if(!sheetName){
-        showLoaderMsg(`No encontré una hoja llamada <b>BD</b> en <b>${file.name}</b>. Revisa que el archivo tenga esa pestaña con los datos diarios.`, true);
-        return;
-      }
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, {raw:true, defval:null});
-      const newData = buildDataFromRows(rows);
-      if(!newData.dates.length){
-        showLoaderMsg(`Encontré la hoja BD en <b>${file.name}</b> pero no pude leer filas válidas (revisa columnas FECHA y MAQUINA).`, true);
-        return;
-      }
-      DATA = newData;
-      dates = DATA.dates;
-      idx = dates.length - 1;
-      populateSelect();
-      renderAll();
-      const now = new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-      showLoaderMsg(`Cargado <b>${file.name}</b> · ${DATA.dates.length} días con datos · actualizado ${now}. Vuelve a cargar el archivo cada vez que lo actualices.`, false);
-    }catch(err){
-      showLoaderMsg(`No pude leer ese archivo (${err.message||err}). Verifica que sea el .xlsx exportado de tu sistema.`, true);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-});
-
 async function tryAutoLoad(){
   try{
     const resp = await fetch('./rows.json', {cache:'no-store'});
@@ -541,10 +503,11 @@ async function tryAutoLoad(){
     dates = DATA.dates;
     idx = dates.length - 1;
     const now = new Date().toLocaleString('es-CO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    showLoaderMsg(`Datos actualizados automáticamente · ${DATA.dates.length} días con datos · última actualización ${now}. Si necesitas cargar un Excel puntual, puedes seguir usando el botón.`, false);
+    showLoaderMsg(`Datos actualizados automáticamente · ${DATA.dates.length} días con datos · última actualización ${now}.`, false);
     return true;
   }catch(e){
-    // Sin rows.json disponible: se queda con los datos de ejemplo y el botón de carga manual sigue funcionando igual que siempre.
+    // Sin rows.json disponible: se muestran los datos de ejemplo mientras se resuelve la actualización automática.
+    showLoaderMsg('No se pudo cargar la actualización automática — mostrando datos de ejemplo. Si esto persiste, revisa el workflow de n8n.', true);
     return false;
   }
 }
