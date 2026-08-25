@@ -153,9 +153,6 @@
   <button id="nextBtn" aria-label="Día siguiente">›</button>
   <select id="turnoSelect">
     <option value="">Todos los turnos</option>
-    <option value="1">Turno 1</option>
-    <option value="2">Turno 2</option>
-    <option value="3">Turno 3</option>
   </select>
 </div>
 <div class="dateinfo" id="dateInfo"></div>
@@ -253,6 +250,13 @@ function populateSelect(){
   sel.innerHTML = dates.map((d,i)=>`<option value="${i}">${niceDate(d)}</option>`).join('');
   document.getElementById('totalDatesLbl').textContent = dates.length;
   sel.onchange = ()=>{ idx = parseInt(sel.value,10); renderAll(); };
+
+  const turnoSel = document.getElementById('turnoSelect');
+  const turnosDisponibles = (DATA.turnos || []);
+  turnoSel.innerHTML = '<option value="">Todos los turnos</option>' +
+    turnosDisponibles.map(t=>`<option value="${t}">Turno ${t}</option>`).join('');
+  if(!turnosDisponibles.includes(turnoFilter)) turnoFilter = '';
+  turnoSel.value = turnoFilter;
 }
 
 document.getElementById('prevBtn').onclick = ()=>{ if(idx>0){ idx--; renderAll(); } };
@@ -439,6 +443,7 @@ function buildDataFromRows(rows){
   const KW = KEYWORDS;
   const byDateMachine = new Map(); // dateStr -> Map(maquina -> {rows accum})
   const dateSet = new Set();
+  const allTurnosSet = new Set();
 
   rows.forEach(r=>{
     const dstr = excelDateToStr(r['FECHA']);
@@ -452,6 +457,7 @@ function buildDataFromRows(rows){
 
     const turno = (r['TURNO']||'').toString().trim().toUpperCase();
     if(turno) bucket.turnos.add(turno);
+    if(turno) allTurnosSet.add(turno);
 
     const prod = Number(r['CANTIDAD PLEGADIZAS X20']);
     if(!isNaN(prod)) bucket.prods.push(prod);
@@ -535,7 +541,7 @@ function buildDataFromRows(rows){
     causesByDate[dstr] = cc;
   });
 
-  return {dates, machinesByDate, trend, causesByDate};
+  return {dates, machinesByDate, trend, causesByDate, turnos: Array.from(allTurnosSet).sort()};
 }
 
 function showLoaderMsg(text, isErr){
