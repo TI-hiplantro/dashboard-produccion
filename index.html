@@ -42,6 +42,7 @@
   .datebar button{border:1px solid var(--line);background:#fff;border-radius:9px;width:38px;height:38px;font-size:16px;cursor:pointer;flex:none;color:var(--ink);}
   .datebar button:active{background:var(--track);}
   .datebar select{flex:1;border:none;background:transparent;font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:700;color:var(--ink);text-align:center;-webkit-appearance:none;appearance:none;padding:8px 4px;}
+  #turnoSelect{flex:0 0 auto;font-size:11.5px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:6px 8px;}
   .dateinfo{font-size:11px;color:var(--muted);text-align:center;margin-bottom:16px;}
   .todaybtn{border:none;background:none;color:var(--brand);font-weight:700;text-decoration:underline;cursor:pointer;font-size:11px;}
 
@@ -107,9 +108,10 @@
   table{width:100%;border-collapse:collapse;font-size:12px;min-width:640px;}
   th{text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;padding:0 7px 7px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap;}
   td{padding:7px 7px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
+  td:has(.novtxt), td:last-child{white-space:normal;vertical-align:top;}
   tr:last-child td{border-bottom:none;}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;}
-  .novtxt{color:var(--muted);font-size:11px;max-width:220px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
+  .novtxt{color:var(--muted);font-size:11px;max-width:260px;display:inline-block;white-space:normal;word-break:break-word;vertical-align:middle;line-height:1.35;}
   .linea-tag{font-size:10.5px;color:var(--muted);}
 
   footer{margin-top:24px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--line);padding-top:12px;}
@@ -149,6 +151,12 @@
   <button id="prevBtn" aria-label="Día anterior">‹</button>
   <select id="dateSelect"></select>
   <button id="nextBtn" aria-label="Día siguiente">›</button>
+  <select id="turnoSelect">
+    <option value="">Todos los turnos</option>
+    <option value="1">Turno 1</option>
+    <option value="2">Turno 2</option>
+    <option value="3">Turno 3</option>
+  </select>
 </div>
 <div class="dateinfo" id="dateInfo"></div>
 
@@ -211,6 +219,7 @@ const CAUSE_LABEL = {"GALLETA":"Galleta","VARIACION DE PESO":"Variación de peso
 
 let dates = DATA.dates;
 let idx = dates.length - 1;
+let turnoFilter = '';
 
 function fmt(n){ return Math.round(n).toLocaleString("es-CO"); }
 function band(pct){ return pct>=70?"good":(pct>=50?"warn":"bad"); }
@@ -221,9 +230,22 @@ function niceDate(dstr){
   return d.toLocaleDateString("es-CO",{day:"2-digit",month:"short",year:"numeric",weekday:"short"});
 }
 
-function rowsToMachines(rows){
-  return rows.map(r=>({maquina:r[0],linea:r[1],turnos:r[2],lider:r[3],producto:r[4],produccion:r[5],meta:r[6],novedad:r[7],
-    pct: r[6] ? Math.round(r[5]/r[6]*1000)/10 : 0}));
+function rowsToMachines(rows, turnoFilter){
+  if(!turnoFilter){
+    return rows.map(r=>({maquina:r[0],linea:r[1],turnos:r[2],lider:r[3],producto:r[4],produccion:r[5],meta:r[6],novedad:r[7],
+      pct: r[6] ? Math.round(r[5]/r[6]*1000)/10 : 0}));
+  }
+  const out = [];
+  rows.forEach(r=>{
+    const tb = (r[8] || {})[turnoFilter];
+    if(!tb) return; // esta máquina no trabajó en el turno seleccionado ese día
+    out.push({
+      maquina:r[0], linea:tb.linea||r[1], turnos:1, lider:tb.lider||'', producto:tb.ref||'',
+      produccion:tb.prod||0, meta:tb.meta||0, novedad:tb.nov||'',
+      pct: tb.meta ? Math.round((tb.prod||0)/tb.meta*1000)/10 : 0
+    });
+  });
+  return out;
 }
 
 function populateSelect(){
@@ -235,18 +257,20 @@ function populateSelect(){
 
 document.getElementById('prevBtn').onclick = ()=>{ if(idx>0){ idx--; renderAll(); } };
 document.getElementById('nextBtn').onclick = ()=>{ if(idx<dates.length-1){ idx++; renderAll(); } };
+document.getElementById('turnoSelect').onchange = function(){ turnoFilter = this.value; renderAll(); };
 
 function renderAll(){
   const dstr = dates[idx];
   document.getElementById('dateSelect').value = idx;
-  document.getElementById('dateInfo').textContent = `Día ${idx+1} de ${dates.length} con datos registrados`;
+  const turnoLbl = turnoFilter ? ` · Turno ${turnoFilter}` : '';
+  document.getElementById('dateInfo').textContent = `Día ${idx+1} de ${dates.length} con datos registrados${turnoLbl}`;
 
-  const machines = rowsToMachines(DATA.machinesByDate[dstr] || []);
+  const machines = rowsToMachines(DATA.machinesByDate[dstr] || [], turnoFilter);
   const totalProd = machines.reduce((a,m)=>a+m.produccion,0);
   const totalMeta = machines.reduce((a,m)=>a+m.meta,0);
   const totalPct = totalMeta ? Math.round(totalProd/totalMeta*1000)/10 : 0;
   const totalDeficit = totalMeta-totalProd;
-  const paros = (DATA.machinesByDate[dstr]||[]).filter(r=>r[7] && r[7]!=="Sin novedades registradas").length;
+  const paros = machines.filter(m=>m.novedad && m.novedad!=="Sin novedades registradas").length;
   const gBand = band(totalPct);
 
   const pill = document.getElementById('statusPill');
@@ -423,7 +447,7 @@ function buildDataFromRows(rows){
     dateSet.add(dstr);
     if(!byDateMachine.has(dstr)) byDateMachine.set(dstr, new Map());
     const mm = byDateMachine.get(dstr);
-    if(!mm.has(maquina)) mm.set(maquina, {turnos:new Set(), prods:[], metas:[], lideres:[], lineas:[], refs:[], novs:[]});
+    if(!mm.has(maquina)) mm.set(maquina, {turnos:new Set(), prods:[], metas:[], lideres:[], lineas:[], refs:[], novs:[], byTurno:{}});
     const bucket = mm.get(maquina);
 
     const turno = (r['TURNO']||'').toString().trim().toUpperCase();
@@ -439,12 +463,25 @@ function buildDataFromRows(rows){
 
     const codigo = (r['CODIGO']||'').toString().trim().toUpperCase();
     const prefix = codigo.slice(0,2);
-    bucket.lineas.push(prefix==='EV' ? 'con SE' : 'sin SE');
+    const lineaVal = prefix==='EV' ? 'con SE' : 'sin SE';
+    bucket.lineas.push(lineaVal);
 
     if(r['REFERENCIA']) bucket.refs.push(r['REFERENCIA'].toString().trim());
 
     const nov = (r['NOVEDADES']||'').toString().trim();
     if(nov) bucket.novs.push(nov);
+
+    // Desglose por turno individual, para el filtro de turno del dashboard
+    if(turno){
+      if(!bucket.byTurno[turno]) bucket.byTurno[turno] = {prods:[], metas:[], lideres:[], lineas:[], refs:[], novs:[]};
+      const tb = bucket.byTurno[turno];
+      if(!isNaN(prod)) tb.prods.push(prod);
+      if(!isNaN(meta)) tb.metas.push(meta);
+      if(r['LIDERES']) tb.lideres.push(r['LIDERES'].toString().trim());
+      tb.lineas.push(lineaVal);
+      if(r['REFERENCIA']) tb.refs.push(r['REFERENCIA'].toString().trim());
+      if(nov) tb.novs.push(nov);
+    }
   });
 
   const dates = Array.from(dateSet).sort();
@@ -467,7 +504,24 @@ function buildDataFromRows(rows){
       const linea = mode(b.lineas) || 'sin SE';
       const ref = (mode(b.refs) || '').slice(0,42);
       const novTxt = b.novs.length ? b.novs[0].slice(0,90) : 'Sin novedades registradas';
-      recs.push([maq, linea, turnos, lider, ref, Math.round(prod), metaDia, novTxt]);
+
+      // Desglose por turno: valores propios de cada turno individual (no del día completo)
+      const turnoBreakdown = {};
+      Object.keys(b.byTurno).forEach(tKey=>{
+        const tb = b.byTurno[tKey];
+        const tProd = tb.prods.reduce((a,v)=>a+v,0);
+        const tMeta = tb.metas.length ? Math.round(tb.metas.reduce((a,v)=>a+v,0)/tb.metas.length) : 0;
+        turnoBreakdown[tKey] = {
+          linea: mode(tb.lineas) || 'sin SE',
+          lider: mode(tb.lideres) || '',
+          ref: (mode(tb.refs) || '').slice(0,42),
+          prod: Math.round(tProd),
+          meta: tMeta,
+          nov: tb.novs.length ? tb.novs[0].slice(0,90) : 'Sin novedades registradas'
+        };
+      });
+
+      recs.push([maq, linea, turnos, lider, ref, Math.round(prod), metaDia, novTxt, turnoBreakdown]);
       totalProd += prod; totalMeta += metaDia;
     });
     machinesByDate[dstr] = recs;
