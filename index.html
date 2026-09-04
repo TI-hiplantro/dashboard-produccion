@@ -254,7 +254,7 @@ function populateSelect(){
   const turnoSel = document.getElementById('turnoSelect');
   const turnosDisponibles = (DATA.turnos || []);
   turnoSel.innerHTML = '<option value="">Todos los turnos</option>' +
-    turnosDisponibles.map(t=>`<option value="${t}">Turno ${t}</option>`).join('');
+    turnosDisponibles.map(t=>`<option value="${t}">Turno ${titleCase(t)}</option>`).join('');
   if(!turnosDisponibles.includes(turnoFilter)) turnoFilter = '';
   turnoSel.value = turnoFilter;
 }
@@ -266,7 +266,7 @@ document.getElementById('turnoSelect').onchange = function(){ turnoFilter = this
 function renderAll(){
   const dstr = dates[idx];
   document.getElementById('dateSelect').value = idx;
-  const turnoLbl = turnoFilter ? ` · Turno ${turnoFilter}` : '';
+  const turnoLbl = turnoFilter ? ` · Turno ${titleCase(turnoFilter)}` : '';
   document.getElementById('dateInfo').textContent = `Día ${idx+1} de ${dates.length} con datos registrados${turnoLbl}`;
 
   const machines = rowsToMachines(DATA.machinesByDate[dstr] || [], turnoFilter);
@@ -414,6 +414,10 @@ function mode(arr){
   let best=null,bestN=0;
   arr.forEach(v=>{ if(v===null||v===undefined||v==='') return; const n=(c.get(v)||0)+1; c.set(v,n); if(n>bestN){bestN=n;best=v;} });
   return best;
+}
+
+function titleCase(s){
+  return (s||'').toString().toLowerCase().replace(/(^|\s)\p{L}/gu, m=>m.toUpperCase());
 }
 
 function excelDateToStr(v){
